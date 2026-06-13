@@ -1,0 +1,369 @@
+Live Screen 实时数据后端框架搭建说明
+
+一、目标说明
+
+本次后端框架只用于搭建 Live Screen 页面所需的实时数据服务基础结构，不包含数据库存储逻辑，也不包含 TouchDesigner 的具体接入实现。
+
+当前阶段的目标是先完成后端基础框架，让项目具备以下能力：
+
+1. 启动一个本地后端服务
+2. 提供基础接口结构
+3. 提供 WebSocket 实时通信结构
+4. 为后续接入 TouchDesigner 实时数据预留入口
+5. 为 React 前端页面提供实时数据推送通道
+
+本阶段不需要做：
+
+1. 数据库存储
+2. 用户登录权限
+3. 历史数据查询
+4. TouchDesigner 具体接口调试
+5. 视频流正式接入
+6. 复杂业务统计报表
+
+
+二、整体技术方案
+
+建议采用以下技术方案：
+
+前端：React + TypeScript + Vite
+后端：Node.js + Express + WebSocket
+通信方式：HTTP 接口 + WebSocket 实时推送
+数据存储：暂不接数据库，仅使用内存状态
+运行方式：前端和后端本地同时启动
+
+整体数据流预留如下：
+
+TouchDesigner
+    ↓
+Node.js 后端服务
+    ↓
+WebSocket 实时推送
+    ↓
+React Live Screen 页面展示
+
+说明：
+
+当前阶段只需要搭建 Node.js 后端服务和 WebSocket 通信框架。
+TouchDesigner 具体如何发送数据、字段如何对应、视频如何接入，后续再单独对接。
+
+
+三、后端目录结构规范
+
+建议在项目根目录新增 server 目录：
+
+live-screen/
+├─ src/                         # React 前端代码
+├─ server/                      # 新增：后端实时服务
+│  ├─ index.ts                  # 后端服务入口
+│  ├─ routes/
+│  │  └─ live-screen.ts         # Live Screen 相关 HTTP 接口
+│  ├─ websocket/
+│  │  └─ live-screen-socket.ts  # Live Screen WebSocket 实时推送
+│  ├─ state/
+│  │  └─ live-screen-state.ts   # 当前实时状态，暂存在内存中
+│  ├─ types/
+│  │  └─ live-screen.ts         # 后端数据类型定义
+│  ├─ constants/
+│  │  └─ live-screen.ts         # 后端常量配置
+│  └─ utils/
+│     └─ live-screen.ts         # 后端工具方法
+
+各目录职责说明：
+
+1. server/index.ts
+
+后端服务入口文件，负责：
+
+- 创建 Express 服务
+- 注册 HTTP 接口
+- 创建 WebSocket 服务
+- 启动本地端口
+- 提供基础健康检查接口
+
+2. server/routes/live-screen.ts
+
+HTTP 接口文件，负责：
+
+- 定义 Live Screen 相关接口
+- 为后续 TouchDesigner 接入预留数据接收接口
+- 当前阶段可以先保留模拟数据接口或空接口结构
+
+3. server/websocket/live-screen-socket.ts
+
+WebSocket 实时通信文件，负责：
+
+- 建立前端与后端的实时连接
+- 管理已连接的前端客户端
+- 提供统一的实时数据推送方法
+- 后续接收到 TouchDesigner 数据后，通过这里推送给 React 页面
+
+4. server/state/live-screen-state.ts
+
+内存状态文件，负责：
+
+- 保存当前页面需要展示的实时状态
+- 不写入数据库
+- 服务重启后状态清空是允许的
+
+5. server/types/live-screen.ts
+
+类型定义文件，负责：
+
+- 定义实时数据结构
+- 定义 WebSocket 消息结构
+- 定义接口请求和响应结构
+
+6. server/constants/live-screen.ts
+
+常量文件，负责：
+
+- 统一管理端口号
+- 统一管理 WebSocket 消息类型
+- 统一管理 Live Screen 页面默认配置
+
+7. server/utils/live-screen.ts
+
+工具方法文件，负责：
+
+- 做无副作用的数据格式转换
+- 做字段兜底处理
+- 做基础数据校验
+
+
+四、建议后端文件结构示例
+
+server/index.ts
+
+职责：
+
+- 启动后端服务
+- 注册接口
+- 注册 WebSocket
+- 暴露本地服务端口
+
+建议服务端口：
+
+HTTP 服务端口：3001
+WebSocket 地址：ws://localhost:3001/ws/live-screen
+
+接口预留：
+
+GET /api/health
+用于检查后端服务是否正常启动
+
+GET /api/live-screen/current
+用于获取当前 Live Screen 状态
+
+POST /api/live-screen/update
+用于后续接收外部实时数据，目前先作为预留接口
+
+
+五、实时数据结构建议
+
+当前页面建议统一使用一个实时数据对象：
+
+LiveScreenData：
+
+{
+  attention: number
+  engagement: number
+  heartRate: number
+  blink: boolean
+  timestamp: number
+}
+
+字段说明：
+
+attention：
+专注力数值，范围建议为 0 - 100
+
+engagement：
+参与度数值，范围建议为 0 - 1
+
+heartRate：
+心率数值，单位 bpm
+
+blink：
+本次是否检测到眨眼，true 表示检测到一次眨眼
+
+timestamp：
+数据产生时间，使用毫秒时间戳
+
+说明：
+
+当前阶段只定义字段结构，不要求立刻接入真实数据。
+后续 TouchDesigner 接入时，只需要按照这个结构把数据传给后端即可。
+
+
+六、WebSocket 消息结构建议
+
+后端向前端推送的数据建议统一为：
+
+{
+  type: 'live-screen-data',
+  payload: {
+    attention: 86,
+    engagement: 0.74,
+    heartRate: 98,
+    blink: false,
+    timestamp: 1710000000000
+  }
+}
+
+字段说明：
+
+type：
+消息类型，用于前端判断当前消息属于哪一类数据
+
+payload：
+实际数据内容
+
+后续如果要扩展视频状态、设备状态、连接状态，也可以继续增加 type，例如：
+
+live-screen-data
+live-screen-connected
+live-screen-disconnected
+live-screen-error
+
+
+七、当前阶段不需要存储的数据
+
+本阶段不接数据库，以下数据全部不需要存储：
+
+1. 实时专注力 attention
+2. 实时参与度 engagement
+3. 实时心率 heartRate
+4. 实时眨眼 blink
+5. 20 秒周期内的眨眼点亮状态
+6. 页面当前评分状态
+7. 实时趋势折线点位
+8. 实时视频画面
+
+这些数据只需要用于当前页面展示，页面刷新或服务重启后清空是可以接受的。
+
+
+八、前端与后端的连接方式
+
+React 页面后续通过 WebSocket 连接后端：
+
+ws://localhost:3001/ws/live-screen
+
+前端连接成功后，后端可以持续推送实时数据。
+
+React 页面收到数据后负责更新：
+
+1. Focus Trend 折线
+2. Engagement Index 指标
+3. Heart Rate 指标
+4. Blink Feedback 点亮状态
+5. 当前评分状态
+
+说明：
+
+Blink Feedback 的 20 秒清零机制建议放在前端页面逻辑中处理。
+后端只负责传递实时 blink 数据，不负责保存周期结果。
+
+
+九、Live Screen 视频区域预留说明
+
+顶部 Live Screen 视频区域当前阶段只需要预留展示位置。
+
+后续视频可以有三种接入方式：
+
+1. 使用本地测试视频
+2. 使用 TouchDesigner 输出的视频流地址
+3. 使用图片帧或 WebRTC 方式接入实时画面
+
+当前阶段不需要实现正式视频接入，只需要保证前端页面有对应展示容器，后端框架中不需要处理视频存储。
+
+
+十、开发顺序建议
+
+第一步：新增 server 目录
+
+在项目根目录增加 server 文件夹，并按照以下结构创建文件：
+
+server/
+├─ index.ts
+├─ routes/
+│  └─ live-screen.ts
+├─ websocket/
+│  └─ live-screen-socket.ts
+├─ state/
+│  └─ live-screen-state.ts
+├─ types/
+│  └─ live-screen.ts
+├─ constants/
+│  └─ live-screen.ts
+└─ utils/
+   └─ live-screen.ts
+
+第二步：安装后端依赖
+
+建议安装：
+
+express
+ws
+cors
+tsx
+typescript
+
+第三步：启动本地后端服务
+
+后端服务启动后，需要能访问：
+
+http://localhost:3001/api/health
+
+如果返回正常，说明后端基础服务启动成功。
+
+第四步：建立 WebSocket 服务
+
+前端后续连接：
+
+ws://localhost:3001/ws/live-screen
+
+连接成功后，后端可以先推送模拟数据。
+
+第五步：前端接入 WebSocket
+
+React 页面新增 Hook：
+
+use-live-screen-socket.ts
+
+负责连接 WebSocket，接收后端推送的数据，并更新页面状态。
+
+第六步：后续再接 TouchDesigner
+
+等后端框架和前端实时展示跑通后，再单独处理 TouchDesigner 如何发送数据、字段如何对应、视频如何接入。
+
+
+十一、当前阶段交付标准
+
+本阶段完成后，需要满足以下标准：
+
+1. 项目中存在 server 后端目录
+2. 后端服务可以正常启动
+3. /api/health 接口可以正常访问
+4. WebSocket 地址可以正常连接
+5. 后端可以向前端推送模拟实时数据
+6. React 页面可以接收 WebSocket 数据
+7. 不接数据库
+8. 不做历史数据存储
+9. 不处理正式 TouchDesigner 接入
+10. 不处理正式视频流接入
+
+
+十二、核心原则
+
+本项目当前阶段的后端只作为实时数据中转层，不作为数据存储系统。
+
+核心原则是：
+
+实时接收
+实时推送
+实时展示
+不做历史存储
+不增加复杂后端负担
+
+先完成基础通信闭环，再逐步接入 TouchDesigner 数据和实时画面。
